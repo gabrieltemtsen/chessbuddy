@@ -4,7 +4,8 @@
  * The private key NEVER leaves the server.
  */
 
-import { createPublicClient, createWalletClient, http, privateKeyToAccount } from "viem";
+import { createPublicClient, createWalletClient, http } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { gnosis } from "viem/chains";
 import type { ContractRunner, Address, TransactionRequest } from "@aboutcircles/sdk-types";
 import { CIRCLES_RPC_URL } from "@/lib/constants";

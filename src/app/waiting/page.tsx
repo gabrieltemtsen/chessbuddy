@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Loader2, X, Bot, Users } from "lucide-react";
@@ -10,6 +10,14 @@ import { MATCH_POLL_INTERVAL_MS, MATCHMAKING_TIMEOUT_MS } from "@/lib/constants"
 import type { Match } from "@/types";
 
 export default function WaitingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]"><Loader2 className="w-10 h-10 animate-spin text-brand-500" /></div>}>
+      <WaitingPageContent />
+    </Suspense>
+  );
+}
+
+function WaitingPageContent() {
   const router = useRouter();
   const params = useSearchParams();
   const matchId = params.get("matchId");
