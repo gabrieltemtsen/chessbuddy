@@ -18,13 +18,15 @@
 import { Sdk } from "@aboutcircles/sdk";
 import { circlesConfig } from "@aboutcircles/sdk-core";
 import type { HumanAvatar } from "@aboutcircles/sdk";
+import type { ContractRunner } from "@aboutcircles/sdk-types";
 import { createBrowserRunner } from "./runner";
 import { STAKE_AMOUNT_WEI } from "@/lib/constants";
 
 let _sdk: Sdk | null = null;
-let _runner: ReturnType<typeof createBrowserRunner> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _runner: any | null = null;
 
-/** Bootstrap the SDK once per page session. Returns the runner's address. */
+/** Bootstrap the SDK once per page session (browser / MetaMask path). Returns the runner's address. */
 export async function initSdk(): Promise<string> {
   _runner = createBrowserRunner();
   await _runner.init();
@@ -32,6 +34,16 @@ export async function initSdk(): Promise<string> {
   _sdk = new Sdk(circlesConfig[100], _runner);
 
   return _runner.address!;
+}
+
+/**
+ * Initialise the SDK with a pre-configured runner (miniapp path).
+ * The caller is responsible for having set runner.address before calling this.
+ * Does NOT call runner.init() — the runner is already ready.
+ */
+export function initSdkWithRunner(runner: ContractRunner): void {
+  _runner = runner;
+  _sdk = new Sdk(circlesConfig[100], runner);
 }
 
 /** Get the connected runner address (null if not initialised). */

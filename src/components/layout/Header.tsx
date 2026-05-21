@@ -9,7 +9,7 @@ import { shortenAddress } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
 export function Header() {
-  const { wallet, connect, disconnect } = useCircles();
+  const { wallet, connect, disconnect, isMiniApp } = useCircles();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -64,18 +64,20 @@ export function Header() {
                     {shortenAddress(wallet.address!)}
                   </span>
                 </div>
-                <div
-                  className={cn(
-                    "w-2.5 h-2.5 rounded-full bg-brand-500 shadow-glow-green animate-pulse-slow"
-                  )}
-                />
-                <button
-                  onClick={disconnect}
-                  className="text-xs text-slate-500 hover:text-red-500 transition-colors font-medium"
-                >
-                  Disconnect
-                </button>
+                <div className={cn("w-2.5 h-2.5 rounded-full bg-brand-500 shadow-glow-green animate-pulse-slow")} />
+                {/* Hide disconnect in miniapp mode — the host controls the session */}
+                {!isMiniApp && (
+                  <button
+                    onClick={disconnect}
+                    className="text-xs text-slate-500 hover:text-red-500 transition-colors font-medium"
+                  >
+                    Disconnect
+                  </button>
+                )}
               </div>
+            ) : isMiniApp ? (
+              /* Waiting for the host to send wallet_connected */
+              <span className="text-xs text-slate-400 animate-pulse">Connecting…</span>
             ) : (
               <button
                 onClick={connect}

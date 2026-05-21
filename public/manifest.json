@@ -1,0 +1,9 @@
+{
+  "name": "ChessBuddy",
+  "description": "Play chess, earn CRC — stake 1 CRC per match on Gnosis Chain. Play vs human or AI. Winner takes 90% of the pool.",
+  "iconUrl": "/icon.png",
+  "url": "/",
+  "version": "0.1.0",
+  "categories": ["game", "defi"],
+  "chains": [100]
+}

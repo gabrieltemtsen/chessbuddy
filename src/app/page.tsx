@@ -17,7 +17,7 @@ function itemAnim(i: number) {
 
 
 export default function LandingPage() {
-  const { wallet, connect } = useCircles();
+  const { wallet, connect, isMiniApp } = useCircles();
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg-primary)]">
@@ -65,6 +65,12 @@ export default function LandingPage() {
                       <Swords className="w-5 h-5" />
                       Start Playing
                     </Link>
+                  ) : isMiniApp ? (
+                    /* In miniapp mode the host is sending the wallet — show a spinner */
+                    <button disabled className="btn-primary text-base py-3.5 px-8 inline-flex items-center gap-2 opacity-70">
+                      <Swords className="w-5 h-5 animate-pulse" />
+                      Connecting wallet…
+                    </button>
                   ) : (
                     <button
                       onClick={connect}
