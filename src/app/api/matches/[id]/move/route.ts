@@ -24,7 +24,7 @@ export async function POST(
     const body: SubmitMoveRequest = await req.json();
     const { from, to, promotion, playerAddress } = body;
 
-    const match = getMatch(id);
+    const match = await getMatch(id);
     if (!match) {
       return NextResponse.json({ error: "Match not found." }, { status: 404 });
     }
@@ -86,7 +86,7 @@ export async function POST(
       }
     }
 
-    saveMatch(match);
+    await saveMatch(match);
     return NextResponse.json({ match, aiMove: aiMoveSan });
   } catch (err) {
     console.error("[POST /api/matches/[id]/move]", err);

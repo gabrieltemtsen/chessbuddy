@@ -8,7 +8,7 @@ export async function POST(
   const { id } = await params;
   const { playerAddress } = await req.json();
 
-  const match = getMatch(id);
+  const match = await getMatch(id);
   if (!match) return NextResponse.json({ error: "Match not found." }, { status: 404 });
   if (match.status !== "active") return NextResponse.json({ error: "Match is not active." }, { status: 400 });
 
@@ -18,8 +18,9 @@ export async function POST(
 
   match.result = isWhite ? "resign_white" : "resign_black";
   match.status = "completed";
-  match.endedAt = Date.now();
-  saveMatch(match);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (match as any).endedAt = Date.now();
+  await saveMatch(match);
 
   return NextResponse.json({ match });
 }

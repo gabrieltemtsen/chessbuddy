@@ -20,9 +20,9 @@ if [ "$CURRENT" -lt "$REQUIRED" ]; then
 fi
 echo "✔  Node v$(node --version | tr -d v)"
 
-# 2. Clean install (remove corrupted node_modules if present)
+# 2. Clean install
 if [ -d "node_modules" ]; then
-  echo "⟳  Removing existing node_modules (this may take a moment)…"
+  echo "⟳  Removing existing node_modules…"
   rm -rf node_modules
 fi
 
@@ -32,29 +32,36 @@ npm install --legacy-peer-deps
 # 3. Copy .env.local if it doesn't exist
 if [ ! -f ".env.local" ]; then
   cp .env.example .env.local
-  echo ""
   echo "✔  Created .env.local from .env.example"
-  echo ""
-  echo "┌─────────────────────────────────────────────────────────────────┐"
-  echo "│  ACTION REQUIRED — edit .env.local before starting the app:    │"
-  echo "│                                                                 │"
-  echo "│  NEXT_PUBLIC_ADMIN_WALLET_ADDRESS=0x...  (your Gnosis wallet)  │"
-  echo "│  ADMIN_WALLET_PRIVATE_KEY=0x...          (server-side only)    │"
-  echo "│                                                                 │"
-  echo "│  Set NEXT_PUBLIC_STAKING_ENABLED=false to skip staking         │"
-  echo "│  during development / testing.                                  │"
-  echo "└─────────────────────────────────────────────────────────────────┘"
-else
-  echo "✔  .env.local already exists — skipping"
 fi
 
-# 4. Create data directory for JSON persistence
-mkdir -p .data
-echo "✔  .data/ directory ready"
-
+# 4. Convex setup
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  Setup complete! Start the dev server with:"
+echo "  STEP: Set up Convex (database)"
+echo ""
+echo "  1. Run:  npx convex dev"
+echo "     This will ask you to log in at dashboard.convex.dev"
+echo "     and create a 'chessbuddy' project."
+echo ""
+echo "  2. It prints two lines like:"
+echo "       CONVEX_URL=https://happy-animal-123.convex.cloud"
+echo "       NEXT_PUBLIC_CONVEX_URL=https://happy-animal-123.convex.cloud"
+echo ""
+echo "  3. Paste BOTH into .env.local"
+echo ""
+echo "  Keep 'npx convex dev' running in a separate terminal"
+echo "  while you develop — it deploys your schema changes live."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "  STEP: Fill in .env.local"
+echo ""
+echo "  NEXT_PUBLIC_ADMIN_WALLET_ADDRESS=0x9aCa34983D694e07ce0369a74F63094C989FDf2c"
+echo "  ADMIN_WALLET_PRIVATE_KEY=0xYOUR_SAFE_OWNER_KEY"
+echo "  NEXT_PUBLIC_STAKING_ENABLED=false   ← set false while testing"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "  Once both steps are done, start the dev server:"
 echo ""
 echo "    npm run dev"
 echo ""

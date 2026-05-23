@@ -1,19 +1,19 @@
 /**
  * GET  /api/matchmaking?address=0x... — poll for match status
- * POST /api/matchmaking               — cancel / leave queue
+ * DELETE /api/matchmaking             — cancel / leave queue
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getQueueEntry, getMatch, dequeuePlayer } from "@/lib/db";
+import { getQueueEntry, getMatch, dequeuePlayer, saveMatch } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
   const address = req.nextUrl.searchParams.get("address");
   if (!address) return NextResponse.json({ error: "address required" }, { status: 400 });
 
-  const entry = getQueueEntry(address);
+  const entry = await getQueueEntry(address);
   if (!entry) return NextResponse.json({ status: "not_in_queue" });
 
-  const match = getMatch(entry.matchId);
+  const match = await getMatch(entry.matchId);
   if (!match) return NextResponse.json({ status: "not_in_queue" });
 
   if (match.status === "active") {
@@ -27,14 +27,14 @@ export async function DELETE(req: NextRequest) {
   const { address, matchId } = await req.json();
   if (!address) return NextResponse.json({ error: "address required" }, { status: 400 });
 
-  dequeuePlayer(address);
+  await dequeuePlayer(address);
 
   if (matchId) {
-    const { getMatch, saveMatch } = await import("@/lib/db");
-    const match = getMatch(matchId);
+    const match = await getMatch(matchId);
     if (match && match.status === "waiting") {
-      match.status = "cancelled";
-      saveMatch(match);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (match as any).status = "cancelled";
+      await saveMatch(match);
     }
   }
 

@@ -3,10 +3,9 @@
  *
  * action: "offer" | "accept" | "decline"
  *
- * Draw payout rule (simplest fair option):
- *   - PvP draw: each player gets 0.9 CRC back, admin keeps 0.2 CRC total
- *   - AI draw:  player gets 0.9 CRC back, admin keeps 0.1 CRC
- * (Documented in README as the chosen draw split)
+ * Draw payout rule:
+ *   - PvP draw: each player gets 0.9 CRC back, platform keeps 0.2 CRC total
+ *   - AI draw:  player gets 0.9 CRC back, platform keeps 0.1 CRC
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -19,7 +18,7 @@ export async function POST(
   const { id } = await params;
   const { playerAddress, action } = await req.json();
 
-  const match = getMatch(id);
+  const match = await getMatch(id);
   if (!match) return NextResponse.json({ error: "Match not found." }, { status: 404 });
   if (match.status !== "active") return NextResponse.json({ error: "Match is not active." }, { status: 400 });
 
@@ -29,12 +28,11 @@ export async function POST(
 
   if (action === "offer") {
     match.drawStatus = isWhite ? "offered_by_white" : "offered_by_black";
-    saveMatch(match);
+    await saveMatch(match);
     return NextResponse.json({ match });
   }
 
   if (action === "accept") {
-    // Verify the other player offered
     const validOffer =
       (isBlack && match.drawStatus === "offered_by_white") ||
       (isWhite && match.drawStatus === "offered_by_black");
@@ -46,14 +44,15 @@ export async function POST(
     match.drawStatus = "accepted";
     match.result = "draw";
     match.status = "completed";
-    match.endedAt = Date.now();
-    saveMatch(match);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (match as any).endedAt = Date.now();
+    await saveMatch(match);
     return NextResponse.json({ match });
   }
 
   if (action === "decline") {
     match.drawStatus = "none";
-    saveMatch(match);
+    await saveMatch(match);
     return NextResponse.json({ match });
   }
 

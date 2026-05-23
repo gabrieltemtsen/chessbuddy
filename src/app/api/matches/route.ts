@@ -1,18 +1,12 @@
 /**
  * POST /api/matches — Create a new match
- *
- * Body: CreateMatchRequest
- * Returns: { match: Match }
- *
- * For AI matches (Easy): no stake required, match starts immediately.
- * For AI matches (Medium / Hard) and all PvP matches: stake required.
- * For PvP: creates a "waiting" match and adds the player to the queue.
+ * GET  /api/matches — List recent matches (admin)
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { Chess } from "chess.js";
 import { v4 as uuidv4 } from "uuid";
-import { saveMatch, enqueuePlayer, getQueueHead } from "@/lib/db";
+import { saveMatch, enqueuePlayer, getQueueHead, getMatch, dequeuePlayer, getAllMatches } from "@/lib/db";
 import type { Match, CreateMatchRequest } from "@/types";
 import { TIMER_DURATION_MS } from "@/lib/constants";
 
@@ -25,7 +19,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "playerAddress is required." }, { status: 400 });
     }
 
-    // Validate stake for paid modes
     const isPaidMode = mode === "human" || (mode === "ai" && difficulty !== "easy");
     if (isPaidMode && !stakeTxHash) {
       return NextResponse.json(
@@ -38,18 +31,14 @@ export async function POST(req: NextRequest) {
     const matchId = uuidv4();
     const now = Date.now();
 
-    // For PvP: check if there's someone waiting in the queue
+    // ── PvP matchmaking ──────────────────────────────────────────────────────
     if (mode === "human") {
-      const waiting = getQueueHead(playerAddress);
+      const waiting = await getQueueHead(playerAddress);
 
       if (waiting) {
-        // Match two players immediately
-        const waitingMatch = await import("@/lib/db").then((db) =>
-          db.getMatch(waiting.matchId)
-        );
+        const waitingMatch = await getMatch(waiting.matchId);
 
         if (waitingMatch && waitingMatch.status === "waiting") {
-          // Assign the new player as black
           waitingMatch.players.black = {
             address: playerAddress,
             color: "black",
@@ -61,16 +50,14 @@ export async function POST(req: NextRequest) {
           waitingMatch.startedAt = now;
           waitingMatch.poolCRC = 2;
 
-          await import("@/lib/db").then((db) => {
-            db.saveMatch(waitingMatch);
-            db.dequeuePlayer(waiting.address);
-          });
+          await saveMatch(waitingMatch);
+          await dequeuePlayer(waiting.address);
 
           return NextResponse.json({ match: waitingMatch });
         }
       }
 
-      // No one waiting — create a new waiting match and join queue
+      // Nobody waiting — create a new waiting match and join queue
       const match: Match = {
         id: matchId,
         mode,
@@ -94,12 +81,12 @@ export async function POST(req: NextRequest) {
         poolCRC: 1,
       };
 
-      saveMatch(match);
-      enqueuePlayer(playerAddress, matchId);
+      await saveMatch(match);
+      await enqueuePlayer(playerAddress, matchId);
       return NextResponse.json({ match });
     }
 
-    // AI match — starts immediately
+    // ── AI match — starts immediately ────────────────────────────────────────
     const match: Match = {
       id: matchId,
       mode: "ai",
@@ -116,7 +103,7 @@ export async function POST(req: NextRequest) {
         black: {
           address: "ai-agent",
           color: "black",
-          hasStaked: true, // AI doesn't stake; user's stake is the prize pool
+          hasStaked: true,
           isAI: true,
           timeRemainingMs: TIMER_DURATION_MS,
         },
@@ -132,16 +119,19 @@ export async function POST(req: NextRequest) {
       poolCRC: isPaidMode ? 1 : 0,
     };
 
-    saveMatch(match);
+    await saveMatch(match);
     return NextResponse.json({ match });
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     console.error("[POST /api/matches]", err);
-    return NextResponse.json({ error: "Internal server error." }, { status: 500 });
+    return NextResponse.json(
+      { error: process.env.NODE_ENV === "development" ? msg : "Internal server error." },
+      { status: 500 }
+    );
   }
 }
 
 export async function GET() {
-  const { getAllMatches } = await import("@/lib/db");
-  const matches = getAllMatches().slice(-50); // last 50 for admin view
-  return NextResponse.json({ matches });
+  const matches = await getAllMatches();
+  return NextResponse.json({ matches: matches.slice(-50) });
 }

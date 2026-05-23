@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bot, Users, Zap, Shield, Trophy, ArrowRight, Loader2, AlertCircle } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { BookOpen } = require("lucide-react") as any;
 import { Header } from "@/components/layout/Header";
 import { useCircles } from "@/contexts/CirclesContext";
 import type { GameMode, AIDifficulty } from "@/types";
@@ -227,6 +229,9 @@ export default function PlayPage() {
           <div className="flex items-center justify-center gap-6 text-sm text-slate-500">
             <a href="/leaderboard" className="flex items-center gap-1.5 hover:text-brand-500 transition-colors">
               <Trophy className="w-3.5 h-3.5" /> Leaderboard
+            </a>
+            <a href="/learn" className="flex items-center gap-1.5 hover:text-brand-500 transition-colors">
+              <BookOpen className="w-3.5 h-3.5" /> New to chess? Learn first
             </a>
           </div>
         </motion.div>

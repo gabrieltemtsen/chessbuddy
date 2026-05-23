@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Swords, Trophy, Zap, Shield, Users, Bot } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { BookOpen } = require("lucide-react") as any;
 import { Header } from "@/components/layout/Header";
 import { useCircles } from "@/contexts/CirclesContext";
 
@@ -84,6 +86,10 @@ export default function LandingPage() {
                   <Link href="/leaderboard" className="btn-secondary text-base py-3.5 px-8 inline-flex items-center gap-2">
                     <Trophy className="w-5 h-5" />
                     Leaderboard
+                  </Link>
+                  <Link href="/learn" className="btn-secondary text-base py-3.5 px-8 inline-flex items-center gap-2">
+                    <BookOpen className="w-5 h-5" />
+                    Learn Chess
                   </Link>
                 </motion.div>
 

@@ -147,15 +147,18 @@ export default function MatchPage() {
     targetSquare,
     piece,
   }: {
-    piece: string;
+    piece: string | null | undefined;
     sourceSquare: string;
     targetSquare: string;
   }): boolean {
     if (!isMyTurn || moveLoading || aiThinking) return false;
 
-    // Detect pawn promotion
+    // piece may be null/undefined in react-chessboard v5 edge cases
+    const pieceStr = typeof piece === "string" ? piece : "";
+
+    // Detect pawn promotion (white pawn "wP" on rank 7→8, black pawn "bP" on rank 2→1)
     const promotion =
-      piece.toLowerCase().includes("p") &&
+      pieceStr.toLowerCase().includes("p") &&
       ((sourceSquare[1] === "7" && targetSquare[1] === "8") ||
         (sourceSquare[1] === "2" && targetSquare[1] === "1"))
         ? "q"
