@@ -9,7 +9,7 @@ import { Chess } from "chess.js";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Flag, Handshake, RotateCcw, Bot, User,
-  Loader2, AlertCircle, ChevronLeft, Zap,
+  Loader2, AlertCircle, ArrowLeft, Zap,
 } from "lucide-react";
 import { useCircles } from "@/contexts/CirclesContext";
 import type { Match, SquareHighlight } from "@/types";
@@ -248,7 +248,7 @@ export default function MatchPage() {
           onClick={() => router.push("/play")}
           className="flex items-center gap-1.5 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
         >
-          <ChevronLeft className="w-4 h-4" />
+          <ArrowLeft className="w-4 h-4" />
           <span className="text-sm font-medium">New Game</span>
         </button>
 
