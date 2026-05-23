@@ -9,8 +9,10 @@ import { Chess } from "chess.js";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Flag, Handshake, RotateCcw, Bot, User,
-  Loader2, AlertCircle, ArrowLeft, Zap,
+  Loader2, AlertCircle, Zap,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { ArrowLeft } = require("lucide-react") as any;
 import { useCircles } from "@/contexts/CirclesContext";
 import type { Match, SquareHighlight } from "@/types";
 import { formatTimer, getWinnerColor, shortenAddress, cn } from "@/lib/utils";
