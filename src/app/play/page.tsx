@@ -3,42 +3,32 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bot, Users, Zap, Shield, Trophy, ArrowRight, Loader2, AlertCircle } from "lucide-react";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { BookOpen } = require("lucide-react") as any;
+import { Bot, Users, Zap, Shield, ArrowRight, Loader2, AlertCircle } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { useCircles } from "@/contexts/CirclesContext";
 import type { GameMode, AIDifficulty } from "@/types";
 import { cn } from "@/lib/utils";
 import { ADMIN_WALLET_ADDRESS } from "@/lib/constants";
 
-const DIFFICULTY_INFO = {
-  easy: { label: "Easy", desc: "Beginner friendly · Free to play", color: "green", free: true },
-  medium: { label: "Medium", desc: "Decent AI · 1 CRC stake", color: "yellow", free: false },
-  hard: { label: "Hard", desc: "Strong AI · 1 CRC stake", color: "red", free: false },
-};
+const STAKING_ENABLED = process.env.NEXT_PUBLIC_STAKING_ENABLED !== "false";
 
 export default function PlayPage() {
   const router = useRouter();
   const { wallet, connect, stakeForMatch, hasEnough } = useCircles();
 
   const [mode, setMode] = useState<GameMode | null>(null);
-  const [difficulty, setDifficulty] = useState<AIDifficulty>("medium");
+  const [difficulty, setDifficulty] = useState<AIDifficulty>("easy");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isPaid =
-    mode === "human" || (mode === "ai" && difficulty !== "easy");
+  const isPaid = STAKING_ENABLED && (mode === "human" || (mode === "ai" && difficulty !== "easy"));
 
   async function handleStart() {
     if (!wallet.isConnected) { await connect(); return; }
-
     setError(null);
     setLoading(true);
-
     try {
       let stakeTxHash: string | undefined;
-
       if (isPaid) {
         if (!hasEnough) {
           setError("You need at least 1 CRC to enter a paid match.");
@@ -47,7 +37,6 @@ export default function PlayPage() {
         }
         stakeTxHash = await stakeForMatch(ADMIN_WALLET_ADDRESS);
       }
-
       const res = await fetch("/api/matches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -58,10 +47,8 @@ export default function PlayPage() {
           stakeTxHash,
         }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to create match.");
-
       if (mode === "human" && data.match.status === "waiting") {
         router.push(`/waiting?matchId=${data.match.id}`);
       } else {
@@ -78,207 +65,250 @@ export default function PlayPage() {
     <div className="min-h-screen flex flex-col bg-[var(--bg-primary)]">
       <Header />
 
-      <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-12">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-8"
-        >
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-1">New Game</h1>
-            <p className="text-slate-500 dark:text-slate-400">Choose your game mode and difficulty, then start playing.</p>
-          </div>
+      <main className="flex-1 flex flex-col max-w-lg mx-auto w-full px-4 pt-5 pb-6">
 
-          {/* Wallet info */}
-          {wallet.isConnected && (
-            <div className="glass-card p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-brand-100 dark:bg-brand-900/40 rounded-full flex items-center justify-center">
-                  <Zap className="w-4 h-4 text-brand-600" />
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-slate-900 dark:text-white">{wallet.crcBalance} CRC available</div>
-                  <div className="text-xs text-slate-500">{wallet.address?.slice(0, 10)}…</div>
-                </div>
+        {/* Balance strip */}
+        {wallet.isConnected && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-between mb-5 px-4 py-3 rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border)]"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-brand-500/20 flex items-center justify-center">
+                <Zap className="w-3.5 h-3.5 text-brand-500" />
               </div>
-              {!hasEnough && (
-                <span className="badge badge-red flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" /> Low balance
-                </span>
+              <div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-none mb-0.5">Your Balance</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-white">{wallet.crcBalance} CRC</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {!hasEnough && isPaid && (
+                <span className="text-[11px] font-medium text-red-500">Low balance</span>
               )}
+              <div className="w-2 h-2 rounded-full bg-brand-500" />
+              <span className="text-[11px] font-mono text-slate-500">{wallet.address?.slice(0, 8)}…</span>
             </div>
+          </motion.div>
+        )}
+
+        {/* Step 1 */}
+        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-3">
+          1 · Game Mode
+        </p>
+
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          <ModeCard
+            icon={<Users className="w-5 h-5" />}
+            title="vs Human"
+            subtitle="Matchmaking"
+            badge="1 CRC each"
+            badgeColor="blue"
+            dotColor="#3b82f6"
+            selected={mode === "human"}
+            onClick={() => setMode("human")}
+          />
+          <ModeCard
+            icon={<Bot className="w-5 h-5" />}
+            title="vs AI"
+            subtitle="Always available"
+            badge="Free / 1 CRC"
+            badgeColor="green"
+            dotColor="#22c55e"
+            selected={mode === "ai"}
+            onClick={() => setMode("ai")}
+          />
+        </div>
+
+        {/* Step 2 - difficulty */}
+        <AnimatePresence>
+          {mode === "ai" && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-3">
+                2 · Difficulty
+              </p>
+              <div className="grid grid-cols-3 gap-2.5 mb-5">
+                {(["easy", "medium", "hard"] as AIDifficulty[]).map((d) => {
+                  const info = {
+                    easy:   { label: "Easy",   sub: "Free",  emoji: "🌱", accent: "#22c55e" },
+                    medium: { label: "Medium", sub: "1 CRC", emoji: "⚡", accent: "#f59e0b" },
+                    hard:   { label: "Hard",   sub: "1 CRC", emoji: "🔥", accent: "#ef4444" },
+                  }[d];
+                  const active = difficulty === d;
+                  return (
+                    <motion.button
+                      key={d}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setDifficulty(d)}
+                      className={cn(
+                        "flex flex-col items-center py-3.5 rounded-2xl border-2 transition-all",
+                        active
+                          ? "border-brand-500 bg-brand-500/10"
+                          : "border-[var(--border)] bg-[var(--bg-secondary)]"
+                      )}
+                    >
+                      <span className="text-xl mb-1">{info.emoji}</span>
+                      <span className={cn(
+                        "text-sm font-bold",
+                        active ? "text-brand-500" : "text-slate-700 dark:text-slate-200"
+                      )}>{info.label}</span>
+                      <span className="text-[11px] font-medium mt-0.5" style={{ color: info.accent }}>
+                        {info.sub}
+                      </span>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </motion.div>
           )}
+        </AnimatePresence>
 
-          {/* Step 1: Mode */}
-          <div>
-            <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
-              1 · Game Mode
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <ModeCard
-                icon={Users}
-                title="vs Human"
-                desc="Join matchmaking and face a real player. Both stake 1 CRC."
-                badge="1 CRC each"
-                badgeColor="blue"
-                selected={mode === "human"}
-                onClick={() => setMode("human")}
-              />
-              <ModeCard
-                icon={Bot}
-                title="vs AI Agent"
-                desc="Always available. Easy is free; Medium & Hard cost 1 CRC."
-                badge="Free / 1 CRC"
-                badgeColor="green"
-                selected={mode === "ai"}
-                onClick={() => setMode("ai")}
-              />
-            </div>
-          </div>
+        {/* Stake info banner */}
+        <AnimatePresence>
+          {mode && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className={cn(
+                "flex items-start gap-3 px-4 py-3.5 rounded-2xl mb-5",
+                isPaid
+                  ? "bg-amber-500/10 border border-amber-500/20"
+                  : "bg-brand-500/10 border border-brand-500/20"
+              )}
+            >
+              <Shield className={cn("w-4 h-4 mt-0.5 flex-shrink-0", isPaid ? "text-amber-500" : "text-brand-500")} />
+              <p className="text-sm text-slate-600 dark:text-slate-300 leading-snug">
+                {isPaid ? (
+                  <>
+                    <span className="font-semibold text-slate-900 dark:text-white">1 CRC staked.</span>{" "}
+                    {mode === "human" ? "Win to earn 1.8 CRC (90% of pool)." : "Beat the AI to earn 0.9 CRC."}
+                  </>
+                ) : (
+                  <>
+                    <span className="font-semibold text-slate-900 dark:text-white">Free match</span> — no CRC staked. Just have fun!
+                  </>
+                )}
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-          {/* Step 2: Difficulty (AI only) */}
-          <AnimatePresence>
-            {mode === "ai" && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-              >
-                <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
-                  2 · Difficulty
-                </h2>
-                <div className="grid grid-cols-3 gap-3">
-                  {(["easy", "medium", "hard"] as AIDifficulty[]).map((d) => {
-                    const info = DIFFICULTY_INFO[d];
-                    return (
-                      <button
-                        key={d}
-                        onClick={() => setDifficulty(d)}
-                        className={cn(
-                          "p-4 rounded-xl border-2 text-left transition-all",
-                          difficulty === d
-                            ? "border-brand-500 bg-brand-50 dark:bg-brand-900/20"
-                            : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
-                        )}
-                      >
-                        <div className="font-semibold text-slate-900 dark:text-white mb-1">{info.label}</div>
-                        <div className="text-xs text-slate-500">{info.desc}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Stake info */}
-          <AnimatePresence>
-            {mode && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="glass-card p-5 flex items-start gap-4"
-              >
-                <Shield className="w-5 h-5 text-brand-500 mt-0.5 flex-shrink-0" />
-                <div className="text-sm text-slate-600 dark:text-slate-400">
-                  {isPaid ? (
-                    <>
-                      <span className="font-semibold text-slate-900 dark:text-white">1 CRC will be staked</span> from your wallet and held by the platform.
-                      {mode === "human"
-                        ? " If you win, you receive 1.8 CRC (90% of the 2 CRC pool). On a draw, both players get 0.9 CRC back."
-                        : " Beat the AI and receive 0.9 CRC back. On a draw, you get 0.9 CRC back."}
-                    </>
-                  ) : (
-                    <>
-                      <span className="font-semibold text-slate-900 dark:text-white">Easy AI is free</span> — no CRC is staked. Just play and have fun!
-                    </>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Error */}
+        {/* Error */}
+        <AnimatePresence>
           {error && (
-            <div className="flex items-center gap-2 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm mb-4"
+            >
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               {error}
-            </div>
+            </motion.div>
           )}
+        </AnimatePresence>
 
-          {/* CTA */}
-          <button
-            disabled={!mode || loading}
-            onClick={handleStart}
-            className="btn-primary w-full text-base py-4 flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                {isPaid ? "Staking CRC…" : "Starting…"}
-              </>
-            ) : (
-              <>
-                {!wallet.isConnected ? "Connect Wallet to Play" : "Start Match"}
-                <ArrowRight className="w-5 h-5" />
-              </>
-            )}
-          </button>
+        <div className="flex-1" />
 
-          {/* Quick links */}
-          <div className="flex items-center justify-center gap-6 text-sm text-slate-500">
-            <a href="/leaderboard" className="flex items-center gap-1.5 hover:text-brand-500 transition-colors">
-              <Trophy className="w-3.5 h-3.5" /> Leaderboard
-            </a>
-            <a href="/learn" className="flex items-center gap-1.5 hover:text-brand-500 transition-colors">
-              <BookOpen className="w-3.5 h-3.5" /> New to chess? Learn first
-            </a>
-          </div>
-        </motion.div>
+        {/* CTA */}
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          disabled={!mode || loading}
+          onClick={handleStart}
+          className={cn(
+            "w-full py-4 rounded-2xl font-bold text-base flex items-center justify-center gap-2.5 transition-all duration-200",
+            mode && !loading
+              ? "bg-brand-500 hover:bg-brand-600 text-white shadow-lg shadow-brand-500/30"
+              : loading
+              ? "bg-brand-500 text-white opacity-80"
+              : "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
+          )}
+        >
+          {loading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              {isPaid ? "Staking CRC…" : "Starting game…"}
+            </>
+          ) : !wallet.isConnected ? (
+            "Connect Wallet to Play"
+          ) : mode ? (
+            <>Start Match <ArrowRight className="w-5 h-5" /></>
+          ) : (
+            "Select a Mode Above"
+          )}
+        </motion.button>
+
       </main>
     </div>
   );
 }
 
+// ── Mode Card ─────────────────────────────────────────────────────────────────
+
 function ModeCard({
-  icon: Icon, title, desc, badge, badgeColor, selected, onClick,
+  icon, title, subtitle, badge, badgeColor, dotColor, selected, onClick,
 }: {
-  icon: React.ElementType;
+  icon: React.ReactNode;
   title: string;
-  desc: string;
+  subtitle: string;
   badge: string;
-  badgeColor: string;
+  badgeColor: "blue" | "green";
+  dotColor: string;
   selected: boolean;
   onClick: () => void;
 }) {
   return (
-    <button
+    <motion.button
+      whileTap={{ scale: 0.95 }}
       onClick={onClick}
       className={cn(
-        "p-5 rounded-2xl border-2 text-left transition-all hover:shadow-md",
+        "relative flex flex-col p-4 rounded-2xl border-2 text-left overflow-hidden transition-all duration-200",
         selected
-          ? "border-brand-500 bg-brand-50 dark:bg-brand-900/20 shadow-md"
-          : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
+          ? "border-brand-500 bg-brand-500/10"
+          : "border-[var(--border)] bg-[var(--bg-secondary)]"
       )}
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className={cn(
-          "w-10 h-10 rounded-xl flex items-center justify-center",
-          selected ? "bg-brand-500" : "bg-slate-100 dark:bg-slate-700"
-        )}>
-          <Icon className={cn("w-5 h-5", selected ? "text-white" : "text-slate-600 dark:text-slate-300")} />
-        </div>
-        {selected && (
-          <div className="w-5 h-5 rounded-full bg-brand-500 flex items-center justify-center">
-            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-            </svg>
-          </div>
-        )}
+      {/* Chessboard pattern BG */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage: `repeating-conic-gradient(rgba(255,255,255,0.04) 0% 25%, transparent 0% 50%)`,
+          backgroundSize: "20px 20px",
+        }}
+      />
+
+      {/* Dot accent */}
+      <div
+        className="absolute top-3 right-3 w-2 h-2 rounded-full"
+        style={{ backgroundColor: selected ? dotColor : "transparent", boxShadow: selected ? `0 0 6px ${dotColor}` : "none", transition: "all 0.2s" }}
+      />
+
+      {/* Icon */}
+      <div className={cn(
+        "w-10 h-10 rounded-xl flex items-center justify-center mb-3 transition-all",
+        selected ? "bg-brand-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+      )}>
+        {icon}
       </div>
-      <div className="font-bold text-slate-900 dark:text-white mb-1">{title}</div>
-      <div className="text-sm text-slate-500 dark:text-slate-400 mb-3">{desc}</div>
-      <span className={`badge badge-${badgeColor}`}>{badge}</span>
-    </button>
+
+      <p className="font-bold text-slate-900 dark:text-white text-sm leading-tight mb-0.5">{title}</p>
+      <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3">{subtitle}</p>
+
+      <span className={cn(
+        "self-start text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide",
+        badgeColor === "blue"
+          ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+          : "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
+      )}>
+        {badge}
+      </span>
+    </motion.button>
   );
 }
