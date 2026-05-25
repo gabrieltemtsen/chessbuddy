@@ -150,20 +150,27 @@ export async function transferCRC(
   const avatar = await _sdk.getAvatar(fromAddress as `0x${string}`);
   const tokenBalances = await (avatar as HumanAvatar).balances.getTokenBalances();
 
-  // Filter to tokens where the held balance is enough to cover the stake.
-  // BigInt() wrap is required because the RPC returns balances as strings at
-  // runtime even though the TypeScript type says bigint.
+  // Helper: get the atto-circles balance from a row.
+  // The TypeScript type says `balance` but the Circles RPC actually returns
+  // `staticAttoCircles` at runtime (confirmed from SDK internals). We try
+  // both so this keeps working if the SDK ever aligns the type with the field.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rowBalance = (tb: any): bigint => {
+    const raw = tb.staticAttoCircles ?? tb.balance ?? tb.attoBalance ?? tb.circles;
+    if (raw === undefined || raw === null) return 0n;
+    try { return BigInt(raw); } catch { return 0n; }
+  };
+
   const candidates = tokenBalances
-    .filter(tb => BigInt(tb.balance) >= amountWei)
+    .filter(tb => rowBalance(tb) >= amountWei)
     // Prefer the token with the most balance (avoids rounding / demurrage edge cases)
-    .sort((a, b) => (BigInt(a.balance) > BigInt(b.balance) ? -1 : 1));
+    .sort((a, b) => (rowBalance(a) > rowBalance(b) ? -1 : 1));
 
   if (candidates.length === 0) {
+    const total = tokenBalances.reduce((s, t) => s + rowBalance(t), 0n);
     throw new Error(
       `Insufficient CRC balance. You need at least 1 CRC. ` +
-      `Current total balance: ${tokenBalances
-        .reduce((s, t) => s + BigInt(t.balance), 0n)
-        .toString()} attoCRC.`
+      `Current total: ${total.toString()} attoCRC.`
     );
   }
 
