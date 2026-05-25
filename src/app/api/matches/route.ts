@@ -19,8 +19,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "playerAddress is required." }, { status: 400 });
     }
 
+    // STAKING_ENABLED is a server-side flag (no NEXT_PUBLIC_ prefix) that must
+    // match NEXT_PUBLIC_STAKING_ENABLED on the frontend. Set both to "false" in
+    // Vercel env vars to disable staking during development or while the
+    // contract-based staking flow is being configured.
+    const stakingEnabled = process.env.STAKING_ENABLED !== "false";
     const isPaidMode = mode === "human" || (mode === "ai" && difficulty !== "easy");
-    if (isPaidMode && !stakeTxHash) {
+    if (stakingEnabled && isPaidMode && !stakeTxHash) {
       return NextResponse.json(
         { error: "stakeTxHash is required for paid matches." },
         { status: 400 }
