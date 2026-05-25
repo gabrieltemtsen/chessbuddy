@@ -99,7 +99,9 @@ export async function transferCRC(
   const maxTransferable = await typedAvatar.transfer.getMaxAmount(toAddress as `0x${string}`);
   if (BigInt(maxTransferable.toString()) < amountWei) {
     throw new Error(
-      `Insufficient transferable CRC. You need at least 1 CRC reachable via your trust path to ${toAddress}.`
+      `ChessBuddyOrg can't receive your CRC yet — no trust path found. ` +
+      `Make sure ChessBuddyOrg trusts your CRC token in Circles Garage ` +
+      `(it should already trust Gnosis group — contact support if this persists).`
     );
   }
 
