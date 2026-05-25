@@ -106,6 +106,20 @@ export async function hasEnoughCRC(address: string): Promise<boolean> {
   }
 }
 
+/** Minimal ABI for Hub v2 view calls. */
+const HUB_VIEW_ABI = [
+  {
+    name: "isTrusted",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "_truster", type: "address" },
+      { name: "_trustee", type: "address" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+] as const;
+
 /**
  * Transfer CRC from the connected wallet to `recipient` using a direct
  * ERC-1155 safeTransferFrom on the Circles Hub v2.
@@ -113,10 +127,15 @@ export async function hasEnoughCRC(address: string): Promise<boolean> {
  * Why direct instead of avatar.transfer.advanced() (pathfinding)?
  *  - Pathfinding queries rpc.aboutcircles.com which can return stale/empty
  *    path data even hours after trust is established → false "no path" errors.
- *  - When ChessBuddyOrg directly trusts the sender (configured via Circles
- *    Garage), no multi-hop routing is needed — one hop is enough.
- *  - In Circles v2, each human's personal token ID = uint256(address), so we
- *    always know the token ID without any lookup.
+ *  - When ChessBuddyOrg directly trusts the sender (via Circles Garage),
+ *    no multi-hop routing is needed — one hop is enough.
+ *
+ * Token selection strategy (why we query token balances first):
+ *  - In Circles v2 the user's total balance is an aggregate across many tokens
+ *    from their trust network.  Their personal token (ID = address) may hold
+ *    far less than 1 CRC.  We must find a token the user actually holds AND
+ *    that ChessBuddyOrg has trusted on-chain — and use that token ID for the
+ *    direct safeTransferFrom call.
  *
  * @returns transaction hash
  */
@@ -125,17 +144,69 @@ export async function transferCRC(
   toAddress: string,
   amountWei: bigint
 ): Promise<string> {
-  if (!_runner) throw new Error("Runner not initialised. Call initSdk() first.");
+  if (!_runner || !_sdk) throw new Error("SDK not initialised. Call initSdk() first.");
 
-  // Circles v2 personal token ID = address cast to uint256
-  const tokenId = BigInt(fromAddress);
+  // ── 1. Fetch the individual token balances the sender holds ──────────────
+  const avatar = await _sdk.getAvatar(fromAddress as `0x${string}`);
+  const tokenBalances = await (avatar as HumanAvatar).balances.getTokenBalances();
+
+  // Filter to tokens where the held balance is enough to cover the stake
+  const candidates = tokenBalances
+    .filter(tb => tb.balance >= amountWei)
+    // Prefer the token with the most balance (avoids rounding / demurrage edge cases)
+    .sort((a, b) => (a.balance > b.balance ? -1 : 1));
+
+  if (candidates.length === 0) {
+    throw new Error(
+      `Insufficient CRC balance. You need at least 1 CRC. ` +
+      `Current total balance: ${tokenBalances
+        .reduce((s, t) => s + t.balance, 0n)
+        .toString()} attoCRC.`
+    );
+  }
+
+  // ── 2. Find a candidate that ChessBuddyOrg trusts on-chain ───────────────
+  // isTrusted(_truster = org, _trustee = tokenAddress) must return true.
+  // We iterate in balance-descending order so we use the richest token first.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const publicClient = (_runner as any).publicClient;
+  let chosenTokenAddress: `0x${string}` | null = null;
+
+  for (const token of candidates) {
+    try {
+      const trusted = await publicClient.readContract({
+        address: CIRCLES_HUB_V2,
+        abi: HUB_VIEW_ABI,
+        functionName: "isTrusted",
+        args: [toAddress as `0x${string}`, token.tokenAddress],
+      });
+      if (trusted) {
+        chosenTokenAddress = token.tokenAddress;
+        break;
+      }
+    } catch {
+      // readContract failed for this token — skip it
+    }
+  }
+
+  if (!chosenTokenAddress) {
+    throw new Error(
+      `CRC transfer failed — ChessBuddyOrg hasn't trusted any of your tokens on-chain. ` +
+      `In Circles Garage, open the Builder org manager, go to "Accepted CRC Tokens", ` +
+      `add your address, then wait ~30 s for the transaction to confirm.`
+    );
+  }
+
+  // ── 3. Execute the direct ERC-1155 safeTransferFrom ──────────────────────
+  // Token ID in Circles v2 = uint256(uint160(tokenAddress))
+  const tokenId = BigInt(chosenTokenAddress);
 
   const data = encodeFunctionData({
     abi: HUB_ABI,
     functionName: "safeTransferFrom",
     args: [
-      fromAddress as `0x${string}`,
-      toAddress  as `0x${string}`,
+      fromAddress        as `0x${string}`,
+      toAddress          as `0x${string}`,
       tokenId,
       amountWei,
       "0x",
@@ -143,26 +214,10 @@ export async function transferCRC(
   });
 
   try {
-    const receipt = await _runner.sendTransaction([
-      { to: CIRCLES_HUB_V2, data },
-    ]);
+    const receipt = await _runner.sendTransaction([{ to: CIRCLES_HUB_V2, data }]);
     return receipt.transactionHash as string;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-
-    // Hub reverts with "not trusted" when the recipient hasn't trusted the sender
-    if (
-      msg.toLowerCase().includes("trust") ||
-      msg.toLowerCase().includes("not trusted") ||
-      msg.toLowerCase().includes("revert") ||
-      msg.toLowerCase().includes("denied")
-    ) {
-      throw new Error(
-        `CRC transfer failed — ChessBuddyOrg hasn't trusted your token yet. ` +
-        `In Circles Garage, open the Builder org manager, go to "Accepted CRC ` +
-        `Tokens", and add your address. Wait ~30 s for the chain to index, then try again.`
-      );
-    }
     throw new Error(`CRC transfer failed: ${msg}`);
   }
 }
