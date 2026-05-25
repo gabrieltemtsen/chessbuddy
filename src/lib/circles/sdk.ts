@@ -150,17 +150,19 @@ export async function transferCRC(
   const avatar = await _sdk.getAvatar(fromAddress as `0x${string}`);
   const tokenBalances = await (avatar as HumanAvatar).balances.getTokenBalances();
 
-  // Filter to tokens where the held balance is enough to cover the stake
+  // Filter to tokens where the held balance is enough to cover the stake.
+  // BigInt() wrap is required because the RPC returns balances as strings at
+  // runtime even though the TypeScript type says bigint.
   const candidates = tokenBalances
-    .filter(tb => tb.balance >= amountWei)
+    .filter(tb => BigInt(tb.balance) >= amountWei)
     // Prefer the token with the most balance (avoids rounding / demurrage edge cases)
-    .sort((a, b) => (a.balance > b.balance ? -1 : 1));
+    .sort((a, b) => (BigInt(a.balance) > BigInt(b.balance) ? -1 : 1));
 
   if (candidates.length === 0) {
     throw new Error(
       `Insufficient CRC balance. You need at least 1 CRC. ` +
       `Current total balance: ${tokenBalances
-        .reduce((s, t) => s + t.balance, 0n)
+        .reduce((s, t) => s + BigInt(t.balance), 0n)
         .toString()} attoCRC.`
     );
   }
