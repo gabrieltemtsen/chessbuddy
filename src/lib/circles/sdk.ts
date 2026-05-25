@@ -92,26 +92,33 @@ export async function transferCRC(
 ): Promise<string> {
   if (!_sdk) throw new Error("SDK not initialised. Call initSdk() first.");
 
+  // Re-fetch the avatar fresh each time so we never use stale trust-graph cache
   const avatar = await _sdk.getAvatar(fromAddress as `0x${string}`);
   const typedAvatar = avatar as HumanAvatar;
 
-  // Check max transferable first to give a friendlier error
-  const maxTransferable = await typedAvatar.transfer.getMaxAmount(toAddress as `0x${string}`);
-  if (BigInt(maxTransferable.toString()) < amountWei) {
-    throw new Error(
-      `ChessBuddyOrg can't receive your CRC yet — no trust path found. ` +
-      `Make sure ChessBuddyOrg trusts your CRC token in Circles Garage ` +
-      `(it should already trust Gnosis group — contact support if this persists).`
+  try {
+    const receipt = await typedAvatar.transfer.advanced(
+      toAddress as `0x${string}`,
+      amountWei
     );
+    return receipt.transactionHash;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Surface a readable error — the most common cause is no trust path
+    if (
+      msg.toLowerCase().includes("path") ||
+      msg.toLowerCase().includes("trust") ||
+      msg.toLowerCase().includes("flow") ||
+      msg.toLowerCase().includes("insufficient")
+    ) {
+      throw new Error(
+        `CRC transfer failed — ChessBuddyOrg may not trust your token yet. ` +
+        `In Circles Garage, make sure your address is in Accepted CRC Tokens. ` +
+        `If you just added it, wait ~30 seconds and try again.`
+      );
+    }
+    throw new Error(`CRC transfer failed: ${msg}`);
   }
-
-  const receipt = await typedAvatar.transfer.advanced(
-    toAddress as `0x${string}`,
-    amountWei
-  );
-
-  // viem TransactionReceipt uses transactionHash
-  return receipt.transactionHash;
 }
 
 
