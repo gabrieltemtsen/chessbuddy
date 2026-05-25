@@ -4,7 +4,7 @@
  * Wraps the @aboutcircles/sdk into a small set of functions used by the app:
  *  - initSdk()           – bootstrap SDK with the browser runner
  *  - getBalance()        – fetch total CRC balance (handles demurrage transparently)
- *  - transferCRC()       – pathfinding-based transfer (advanced flow)
+ *  - transferCRC()       – direct ERC-1155 safeTransferFrom on Circles Hub v2
  *  - hasEnoughCRC()      – balance gate check
  *
  * ASSUMPTION: CRC amounts are stored and compared as BigInt (1e18 per CRC, same
@@ -13,14 +13,41 @@
  * DEMURRAGE NOTE: Balances are fetched live via avatar.balances.getTotal() which
  * already accounts for the 7% yearly decay applied by the hub contract.  We never
  * cache raw balances between page loads.
+ *
+ * TRANSFER NOTE: We bypass avatar.transfer.advanced() (pathfinding) entirely.
+ * In Circles v2, each human has a personal token whose ID = uint256(userAddress).
+ * If ChessBuddyOrg directly trusts the user (set via Circles Garage), a plain
+ * ERC-1155 safeTransferFrom on the Hub contract is simpler, faster, and avoids
+ * the stale pathfinding-RPC cache that was causing false "no path" errors.
  */
 
 import { Sdk } from "@aboutcircles/sdk";
 import { circlesConfig } from "@aboutcircles/sdk-core";
 import type { HumanAvatar } from "@aboutcircles/sdk";
 import type { ContractRunner } from "@aboutcircles/sdk-types";
+import { encodeFunctionData } from "viem/utils";
 import { createBrowserRunner } from "./runner";
 import { STAKE_AMOUNT_WEI } from "@/lib/constants";
+
+// ── Circles Hub v2 (Gnosis Chain, chainId 100) ────────────────────────────────
+const CIRCLES_HUB_V2 = "0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8" as const;
+
+/** Minimal ABI — only the ERC-1155 safeTransferFrom we need. */
+const HUB_ABI = [
+  {
+    name: "safeTransferFrom",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "from",  type: "address" },
+      { name: "to",    type: "address" },
+      { name: "id",    type: "uint256" },
+      { name: "value", type: "uint256" },
+      { name: "data",  type: "bytes"   },
+    ],
+    outputs: [],
+  },
+] as const;
 
 let _sdk: Sdk | null = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -80,41 +107,60 @@ export async function hasEnoughCRC(address: string): Promise<boolean> {
 }
 
 /**
- * Transfer CRC from the connected wallet to `recipient`.
- * Uses avatar.transfer.advanced() which runs pathfinding automatically.
+ * Transfer CRC from the connected wallet to `recipient` using a direct
+ * ERC-1155 safeTransferFrom on the Circles Hub v2.
  *
- * @returns transaction receipt hash
+ * Why direct instead of avatar.transfer.advanced() (pathfinding)?
+ *  - Pathfinding queries rpc.aboutcircles.com which can return stale/empty
+ *    path data even hours after trust is established → false "no path" errors.
+ *  - When ChessBuddyOrg directly trusts the sender (configured via Circles
+ *    Garage), no multi-hop routing is needed — one hop is enough.
+ *  - In Circles v2, each human's personal token ID = uint256(address), so we
+ *    always know the token ID without any lookup.
+ *
+ * @returns transaction hash
  */
 export async function transferCRC(
   fromAddress: string,
   toAddress: string,
   amountWei: bigint
 ): Promise<string> {
-  if (!_sdk) throw new Error("SDK not initialised. Call initSdk() first.");
+  if (!_runner) throw new Error("Runner not initialised. Call initSdk() first.");
 
-  // Re-fetch the avatar fresh each time so we never use stale trust-graph cache
-  const avatar = await _sdk.getAvatar(fromAddress as `0x${string}`);
-  const typedAvatar = avatar as HumanAvatar;
+  // Circles v2 personal token ID = address cast to uint256
+  const tokenId = BigInt(fromAddress);
+
+  const data = encodeFunctionData({
+    abi: HUB_ABI,
+    functionName: "safeTransferFrom",
+    args: [
+      fromAddress as `0x${string}`,
+      toAddress  as `0x${string}`,
+      tokenId,
+      amountWei,
+      "0x",
+    ],
+  });
 
   try {
-    const receipt = await typedAvatar.transfer.advanced(
-      toAddress as `0x${string}`,
-      amountWei
-    );
-    return receipt.transactionHash;
+    const receipt = await _runner.sendTransaction([
+      { to: CIRCLES_HUB_V2, data },
+    ]);
+    return receipt.transactionHash as string;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // Surface a readable error — the most common cause is no trust path
+
+    // Hub reverts with "not trusted" when the recipient hasn't trusted the sender
     if (
-      msg.toLowerCase().includes("path") ||
       msg.toLowerCase().includes("trust") ||
-      msg.toLowerCase().includes("flow") ||
-      msg.toLowerCase().includes("insufficient")
+      msg.toLowerCase().includes("not trusted") ||
+      msg.toLowerCase().includes("revert") ||
+      msg.toLowerCase().includes("denied")
     ) {
       throw new Error(
-        `CRC transfer failed — ChessBuddyOrg may not trust your token yet. ` +
-        `In Circles Garage, make sure your address is in Accepted CRC Tokens. ` +
-        `If you just added it, wait ~30 seconds and try again.`
+        `CRC transfer failed — ChessBuddyOrg hasn't trusted your token yet. ` +
+        `In Circles Garage, open the Builder org manager, go to "Accepted CRC ` +
+        `Tokens", and add your address. Wait ~30 s for the chain to index, then try again.`
       );
     }
     throw new Error(`CRC transfer failed: ${msg}`);
